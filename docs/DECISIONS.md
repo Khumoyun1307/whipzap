@@ -152,6 +152,8 @@ WhipZap never sends Ctrl-C, Esc, or any control key other than Enter.
 
 ## D-13 No synthesized modifier keys, including Alt
 
+Exception recorded 2026-10-21: the Linux helper passes `--clearmodifiers` to `xdotool type` and `xdotool key Return`, which releases and re-presses modifiers the user is physically holding. Without it a held Ctrl would turn a letter of the taunt into a control chord. No other platform synthesizes modifier events.
+
 **Context.** A widely used workaround for the Windows foreground lock is to simulate an Alt key press so the calling process counts as having received the last input event. The spike showed `AttachThreadInput` plus `SetForegroundWindow` (with `SwitchToThisWindow` as fallback) succeeds without it, and a bare Alt tap activates menu bars in some applications.
 
 **Decision.** WhipZap never synthesizes any modifier key. The only key events it ever produces are Unicode text events and Enter. `npm run lint:keys` fails on `VK_MENU` as well as the D-1 strings.

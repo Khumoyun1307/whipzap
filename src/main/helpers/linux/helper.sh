@@ -12,7 +12,9 @@
 # Codes: 1 other, 2 permission, 3 target gone, 4 unsupported, 5 focus failed.
 #
 # Safety (D-1): only `xdotool type` for the message text and `xdotool key Return` for Enter are used.
-# Nothing else is ever sent. Wayland is refused up front because xdotool cannot type there.
+# `--clearmodifiers` releases modifiers the user is physically holding (and presses them again after)
+# so a held Ctrl cannot turn a letter into a control chord; this is the documented exception to D-13.
+# Wayland is refused up front because xdotool cannot type there.
 set -u
 
 json_str() {
@@ -37,6 +39,14 @@ check_env() {
 
 active_window() {
   xdotool getactivewindow 2>/dev/null
+}
+
+# Window ids are decimal X11 ids. Anything else is refused so an id can never be mistaken for an
+# xdotool option.
+require_numeric_id() {
+  case "$1" in
+    ''|*[!0-9]*) fail 3 "window id must be numeric, got '$1'" ;;
+  esac
 }
 
 describe() {
@@ -65,13 +75,13 @@ case "$cmd" in
     ;;
   info)
     check_env
-    [ -n "${2:-}" ] || fail 3 "missing window id"
+    require_numeric_id "${2:-}"
     describe "$2"
     ;;
   focus)
     check_env
     id=${2:-}
-    [ -n "$id" ] || fail 3 "missing window id"
+    require_numeric_id "$id"
     xdotool getwindowname "$id" >/dev/null 2>&1 || fail 3 "window $id is gone"
     xdotool windowactivate --sync "$id" >/dev/null 2>&1 || true
     i=0
@@ -85,7 +95,7 @@ case "$cmd" in
   type)
     check_env
     id=${2:-}
-    [ -n "$id" ] || fail 3 "missing window id"
+    require_numeric_id "$id"
     enter=0
     [ "${3:-}" = "--enter" ] && enter=1
     text=$(cat)
@@ -97,6 +107,8 @@ case "$cmd" in
       xdotool type --clearmodifiers --delay 8 -- "$text" || fail 1 "xdotool type failed"
     fi
     if [ "$enter" -eq 1 ]; then
+      # Re-verify right before Enter: typing 200 characters takes about 1.6 s and focus may have moved.
+      [ "$(active_window)" = "$id" ] || fail 3 "target window $id is no longer active; Enter not sent"
       xdotool key --clearmodifiers Return || fail 1 "xdotool key Return failed"
     fi
     printf '{"ok":true,"typed":%d}\n' "${#text}"

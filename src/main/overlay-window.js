@@ -23,6 +23,9 @@ export function createOverlayWindow(electron, appRoot, { log, onMessage }) {
   let ready = false;
   let queued = [];
   let hideTimer = null;
+  let destroyed = false;
+  let crashes = 0;
+  let interactive = false;
 
   function bounds() {
     return screen.getPrimaryDisplay().bounds;
@@ -63,12 +66,22 @@ export function createOverlayWindow(electron, appRoot, { log, onMessage }) {
     win.setMenu?.(null);
     win.webContents.on('render-process-gone', (_e, details) => {
       log.error('overlay renderer gone', details.reason);
+      if (destroyed) return;
       try {
         win.destroy();
       } catch {
         /* ignore */
       }
-      create();
+      win = null;
+      ready = false;
+      crashes += 1;
+      if (crashes > 5) {
+        log.error('overlay crashed too often; giving up on visuals');
+        return;
+      }
+      setTimeout(() => {
+        if (!destroyed) create();
+      }, Math.min(30000, 500 * 2 ** (crashes - 1)));
     });
     win.webContents.on('console-message', (event) => {
       const level = event.level;
@@ -83,6 +96,7 @@ export function createOverlayWindow(electron, appRoot, { log, onMessage }) {
   ipcMain.on('overlay:ready', () => {
     ready = true;
     send('overlay:setReduceMotion', { enabled: Boolean(nativeTheme?.prefersReducedTransparency) });
+    if (interactive) setMouseMode(true); // re-apply after a renderer restart
     for (const [c, p] of queued) send(c, p);
     queued = [];
     onMessage('overlay:ready', {});
@@ -121,15 +135,16 @@ export function createOverlayWindow(electron, appRoot, { log, onMessage }) {
     }, ms);
   }
 
-  function setMouseMode(interactive) {
+  function setMouseMode(on) {
+    interactive = on;
     if (!win || win.isDestroyed()) return;
     // Whip mode needs real mouse input. A non-activatable window gets mouse moves on Windows but
     // not button presses, so the overlay becomes focusable only while the whip is armed; app.js
     // hands focus back to the locked target on drop.
-    win.setFocusable(interactive);
-    win.setIgnoreMouseEvents(!interactive, { forward: true });
-    if (interactive) win.focus();
-    send('overlay:setMouseMode', { interactive });
+    win.setFocusable(on);
+    win.setIgnoreMouseEvents(!on, { forward: true });
+    if (on) win.focus();
+    send('overlay:setMouseMode', { interactive: on });
   }
 
   screen.on('display-metrics-changed', () => {
@@ -147,6 +162,7 @@ export function createOverlayWindow(electron, appRoot, { log, onMessage }) {
     capture: async () => (win && !win.isDestroyed() ? (await win.webContents.capturePage()).toPNG() : null),
     nativeHandle: () => (win && !win.isDestroyed() ? win.getNativeWindowHandle().readBigUInt64LE?.(0)?.toString() ?? '' : ''),
     destroy: () => {
+      destroyed = true;
       if (win && !win.isDestroyed()) win.destroy();
     },
   };

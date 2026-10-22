@@ -381,7 +381,7 @@ Sound and visual never wait for the helper. If a helper request takes longer tha
 |---|---|
 | Location | `src/main/helpers/<os>/` resolved relative to `platform/<os>.js`. Never written to at runtime. Windows: `win/worker.ps1`. macOS: `mac/helper.sh`. Linux: `linux/helper.sh`. |
 | Windows spawn | One long-lived worker (D-12): `spawn('powershell.exe', ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File', worker.ps1], { windowsHide: true })`, started by `platform.start()` at app launch, restarted on exit. Protocol: one JSON request per line on stdin, one JSON response per line on stdout, strictly in order. Requests: `{"op":"ping"}`, `{"op":"foreground"}`, `{"op":"info","id"}`, `{"op":"focus","id"}`, `{"op":"type","id","text","enter"}`, `{"op":"quit"}`. Per-request timeout 5 s; start timeout 15 s. |
-| macOS and Linux spawn | One short-lived process per command: `child_process.execFile('/bin/sh', [helper, command, ...args], { timeout: 5000, maxBuffer: 64 KiB })`. |
+| macOS and Linux spawn | One short-lived process per command: `child_process.execFile('/bin/sh', [helper, command, ...args], { timeout: 8000, maxBuffer: 64 KiB })`. |
 | Text input | Windows: the `text` field of the JSON request (UTF-8 stdin). macOS and Linux: raw text on stdin. Never as an argument or shell string. |
 | Output | JSON object on stdout: `{ "ok": true, ... }` or `{ "ok": false, "code": n, "error": "..." }`. Human text on stderr only. Windows: the first line after start is `{"ok":true,"ready":true}`. |
 | Codes | 0 ok, 1 other, 2 permission missing, 3 target gone or not foreground, 4 unsupported environment or missing tool (Wayland, xdotool absent), 5 focus could not be acquired. One-shot helpers use these as exit codes; the Windows worker uses them as the `code` field. |
@@ -395,7 +395,7 @@ Window ids: Windows HWND as decimal string; macOS `pid:<pid>` (process level, se
 |---|---|---|---|
 | id | HWND | `pid:<unix id>` | `_NET_ACTIVE_WINDOW` id |
 | title | `GetWindowText` | name of front window of frontmost process (empty if none) | `getwindowname` |
-| processName | `Process.GetProcessById(pid).ProcessName` + `.exe` | process `name` from System Events | `/proc/<pid>/comm` via `getwindowpid`, empty if unknown |
+| processName | `Get-Process -Id pid` `ProcessName` without extension (for example `WindowsTerminal`, `Code`) | process `name` from System Events | `/proc/<pid>/comm` via `getwindowpid`, empty if unknown |
 | pid | `GetWindowThreadProcessId` | `unix id` | `getwindowpid` |
 
 ### 6.3 Windows: `src/main/helpers/win/worker.ps1` (verified 2026-10-21)
@@ -460,7 +460,9 @@ Invoked as `/bin/sh <path> <command>`. Requires `xdotool` on PATH.
 | `focus <id>` | `xdotool windowactivate --sync $id` then verify `getactivewindow == id` else exit 5. |
 | `type <id>` | verify active window equals id (exit 3), read stdin, `xdotool type --clearmodifiers --delay 8 --file -` (UNVERIFIED that `--file -` exists in the installed xdotool; fallback: pass text as a single argv element, which is safe because `execFile` does not use a shell), then `xdotool key --clearmodifiers Return` when `--enter`. |
 
-XWayland sessions where `DISPLAY` is set may work partially; the helper does not block them but `UX.md` documents that Wayland is unsupported.
+XWayland sessions (`XDG_SESSION_TYPE=wayland` even with `DISPLAY` set) are refused by `check` as unsupported; typing under XWayland is not attempted in v1.
+
+Note on `xdotool --clearmodifiers`: it releases modifier keys the user is physically holding and presses them again after typing. This is the single place where WhipZap synthesizes modifier key events, and it exists so that a held Ctrl cannot turn the letter `c` of a taunt into Ctrl-C. Recorded as the exception to D-13.
 
 ### 6.6 Unsupported stub
 

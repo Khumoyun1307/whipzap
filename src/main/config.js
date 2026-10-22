@@ -96,7 +96,7 @@ export function validateConfig(obj) {
   if (obj.hotkeys !== undefined) {
     if (obj.hotkeys && typeof obj.hotkeys === 'object') {
       for (const key of Object.keys(obj.hotkeys)) {
-        if (!(key in DEFAULT_CONFIG.hotkeys)) {
+        if (!Object.hasOwn(DEFAULT_CONFIG.hotkeys, key)) {
           warnings.push(`unknown hotkeys key "${key}" ignored`);
           continue;
         }
@@ -117,7 +117,7 @@ export function validateConfig(obj) {
     if (obj.auto && typeof obj.auto === 'object') {
       const a = obj.auto;
       for (const key of Object.keys(a)) {
-        if (!(key in DEFAULT_CONFIG.auto)) warnings.push(`unknown auto key "${key}" ignored`);
+        if (!Object.hasOwn(DEFAULT_CONFIG.auto, key)) warnings.push(`unknown auto key "${key}" ignored`);
       }
       if (a.baseIntervalSec !== undefined) {
         if (typeof a.baseIntervalSec === 'number' && Number.isFinite(a.baseIntervalSec)) {
@@ -166,7 +166,7 @@ export function validateConfig(obj) {
   if (obj.whip !== undefined) {
     if (obj.whip && typeof obj.whip === 'object') {
       for (const key of Object.keys(obj.whip)) {
-        if (!(key in DEFAULT_CONFIG.whip)) warnings.push(`unknown whip key "${key}" ignored`);
+        if (!Object.hasOwn(DEFAULT_CONFIG.whip, key)) warnings.push(`unknown whip key "${key}" ignored`);
       }
       if (obj.whip.crackFactor !== undefined) {
         if (typeof obj.whip.crackFactor === 'number' && Number.isFinite(obj.whip.crackFactor)) {
@@ -196,7 +196,7 @@ export function validateConfig(obj) {
     if (obj.sound && typeof obj.sound === 'object') {
       const s = obj.sound;
       for (const key of Object.keys(s)) {
-        if (!(key in DEFAULT_CONFIG.sound)) warnings.push(`unknown sound key "${key}" ignored`);
+        if (!Object.hasOwn(DEFAULT_CONFIG.sound, key)) warnings.push(`unknown sound key "${key}" ignored`);
       }
       if (s.muted !== undefined) {
         if (typeof s.muted === 'boolean') config.sound.muted = s.muted;
@@ -221,7 +221,7 @@ export function validateConfig(obj) {
     if (obj.messages && typeof obj.messages === 'object') {
       const m = obj.messages;
       for (const key of Object.keys(m)) {
-        if (!(key in DEFAULT_CONFIG.messages)) warnings.push(`unknown messages key "${key}" ignored`);
+        if (!Object.hasOwn(DEFAULT_CONFIG.messages, key)) warnings.push(`unknown messages key "${key}" ignored`);
       }
       if (m.extra !== undefined) {
         if (Array.isArray(m.extra)) {
@@ -259,7 +259,7 @@ export function validateConfig(obj) {
     if (obj.target && typeof obj.target === 'object') {
       const t = obj.target;
       for (const key of Object.keys(t)) {
-        if (!(key in DEFAULT_CONFIG.target)) warnings.push(`unknown target key "${key}" ignored`);
+        if (!Object.hasOwn(DEFAULT_CONFIG.target, key)) warnings.push(`unknown target key "${key}" ignored`);
       }
       if (t.allowPatterns !== undefined) {
         if (Array.isArray(t.allowPatterns)) {
@@ -357,7 +357,11 @@ export function watchConfig({ configPath: file, fs = nodeFsPromises, watch = nod
       timer = setTimeout(async () => {
         timer = null;
         try {
-          const result = await loadConfig({ configPath: file, fs });
+          // The watcher only reports; it never renames or rewrites the user's file (that is loadConfig's
+          // job at startup), so a half-saved edit is not clobbered.
+          const text = await fs.readFile(file, 'utf8');
+          const result = parseConfig(text);
+          if (result.parseError) result.warnings = [...result.warnings, 'config.json is not valid JSON; using defaults until it is fixed'];
           const serialized = serialize(result.config);
           if (serialized === lastSerialized) return;
           lastSerialized = serialized;

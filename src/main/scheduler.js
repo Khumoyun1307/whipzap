@@ -23,11 +23,17 @@ export function createScheduler({ config, clock, rng, onFire, onStop }) {
   let next = rng ?? null;
   let firing = false;
 
+  // config may be an object or a getter so that a config reload applies to the running session.
+  function src() {
+    return typeof config === 'function' ? config() : config;
+  }
+
   function cfg() {
+    const c = src();
     return {
-      base: Number(config.baseIntervalSec) || 180,
-      jitter: Number(config.jitterSec) || 0,
-      cap: Number(config.sessionCap) || 20,
+      base: Number(c.baseIntervalSec) || 180,
+      jitter: Number(c.jitterSec) || 0,
+      cap: Number(c.sessionCap) || 20,
     };
   }
 
@@ -63,6 +69,8 @@ export function createScheduler({ config, clock, rng, onFire, onStop }) {
     const payload = { count, tier: tierForCount(count - 1) };
     try {
       await onFire(payload);
+    } catch {
+      /* an error in one crack must not end the auto session */
     } finally {
       firing = false;
     }
@@ -89,7 +97,8 @@ export function createScheduler({ config, clock, rng, onFire, onStop }) {
       count = 0;
       paused = false;
       if (!rng) {
-        seed = config.seed == null ? (clk.now() ^ 0x9e3779b9) >>> 0 : config.seed >>> 0;
+        const s = src().seed;
+        seed = s == null ? (clk.now() ^ 0x9e3779b9) >>> 0 : s >>> 0;
         next = createRng(seed).next;
       }
       running = true;

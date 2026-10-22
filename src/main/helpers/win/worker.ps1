@@ -125,7 +125,11 @@ function Describe([IntPtr]$h) {
   @{ ok = $true; id = ("{0}" -f $h.ToInt64()); title = [WZ]::Title($h); processName = (Get-ProcName $procId); pid = [int]$procId }
 }
 
+$script:rid = $null
+
+# Every response echoes the request id (`rid`) so the adapter matches replies by id, never by order.
 function Emit($obj) {
+  if ($null -ne $script:rid) { $obj = @{} + $obj; $obj.rid = $script:rid }
   $json = ($obj | ConvertTo-Json -Compress -Depth 4)
   [Console]::Out.WriteLine($json)
   [Console]::Out.Flush()
@@ -144,8 +148,10 @@ while ($true) {
   $line = [Console]::In.ReadLine()
   if ($null -eq $line) { break }
   if ($line.Trim() -eq '') { continue }
+  $script:rid = $null
   try {
     $req = $line | ConvertFrom-Json
+    if ($null -ne $req.rid) { $script:rid = $req.rid }
     switch ($req.op) {
       'ping'       { Emit @{ ok = $true; pong = $true } }
       'quit'       { Emit @{ ok = $true }; exit 0 }

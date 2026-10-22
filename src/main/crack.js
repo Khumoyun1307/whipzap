@@ -23,6 +23,7 @@ const SETTLE_MS = 150;
 export function createCrack(deps) {
   const { platform, targets, getPack, rng, state, audio, overlay, toast, clock, log, sounds, getConfig } = deps;
   let lastStart = -Infinity;
+  let inFlight = false;
   let accessibilityPrompted = false;
 
   function pickSound() {
@@ -36,12 +37,20 @@ export function createCrack(deps) {
    */
   async function crack({ source = 'hotkey' } = {}) {
     const now = clock.now();
-    if (now - lastStart < BUSY_WINDOW_MS) {
+    if (inFlight || now - lastStart < BUSY_WINDOW_MS) {
       log.debug('crack skipped: busy');
       return { typed: false, skipped: 'busy' };
     }
     lastStart = now;
+    inFlight = true;
+    try {
+      return await run(source);
+    } finally {
+      inFlight = false;
+    }
+  }
 
+  async function run(source) {
     const tier = state.autoOn ? tierForCount(state.autoCount) : source === 'whip' ? 'medium' : 'mild';
     if (state.autoOn) state.autoCount = (state.autoCount ?? 0) + 1;
 
@@ -64,7 +73,15 @@ export function createCrack(deps) {
       return { typed: false, message, tier, error: 'no-target' };
     }
 
-    if (!(await targets.exists())) {
+    let alive;
+    try {
+      alive = await targets.exists();
+    } catch (err) {
+      log.error('target check failed', err);
+      toast('Typing failed', 3000);
+      return { typed: false, message, tier, error: 'typing-failed' };
+    }
+    if (!alive) {
       toast('Target window closed', 3000);
       deps.onTargetLost?.();
       return { typed: false, message, tier, error: 'target-gone' };

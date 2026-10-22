@@ -29,7 +29,9 @@ export function compilePattern(pattern) {
     const [, body, flags] = regexMatch;
     if (body.length > MAX_REGEX_LENGTH) return null;
     try {
-      const re = new RegExp(body, flags.includes('i') ? flags : `${flags}i`);
+      // g and y make test() stateful (lastIndex), which would let the same window pass once and fail next.
+      const safeFlags = flags.replace(/[gy]/g, '');
+      const re = new RegExp(body, safeFlags.includes('i') ? safeFlags : `${safeFlags}i`);
       return { source: trimmed, test: (s) => re.test(s) };
     } catch {
       return null;
@@ -100,6 +102,21 @@ export function isSelf(info, { selfPid, selfTitles = ['WhipZap'] } = {}) {
  * @param {{ platform: object, confirm: (info: object) => Promise<boolean>|boolean, selfPid?: number,
  *           patterns?: string[], lastForeground?: () => Promise<object>, selfTitles?: string[] }} deps
  */
+/**
+ * True when a freshly read window still belongs to the same process as when it was locked.
+ * A recycled id with a different pid or process name is treated as a different window.
+ */
+export function sameOwner(locked, fresh) {
+  if (!locked || !fresh) return false;
+  const lockedPid = Number(locked.pid) || 0;
+  const freshPid = Number(fresh.pid) || 0;
+  if (lockedPid && freshPid && lockedPid !== freshPid) return false;
+  const a = String(locked.processName ?? '').toLowerCase();
+  const b = String(fresh.processName ?? '').toLowerCase();
+  if (a && b && a !== b) return false;
+  return true;
+}
+
 export function createTargetStore({ platform, confirm, selfPid, patterns = DEFAULT_ALLOW_PATTERNS, lastForeground, selfTitles }) {
   let target = null;
 
@@ -135,12 +152,15 @@ export function createTargetStore({ platform, confirm, selfPid, patterns = DEFAU
     clear() {
       target = null;
     },
-    /** Re-reads the locked window. Clears the lock and returns false when it is gone. */
+    /**
+     * Re-reads the locked window. Clears the lock and returns false when it is gone, or when the id
+     * now belongs to a different process (window ids and pids are recycled by every OS).
+     */
     async exists() {
       if (!target) return false;
+      let fresh;
       try {
-        await platform.getWindowInfo(target.id);
-        return true;
+        fresh = await platform.getWindowInfo(target.id);
       } catch (err) {
         if (err instanceof HelperError && err.code === HELPER_CODES.TARGET_GONE) {
           target = null;
@@ -148,6 +168,11 @@ export function createTargetStore({ platform, confirm, selfPid, patterns = DEFAU
         }
         throw err;
       }
+      if (!sameOwner(target, fresh)) {
+        target = null;
+        return false;
+      }
+      return true;
     },
   };
 }

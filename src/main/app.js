@@ -139,7 +139,17 @@ async function main() {
   }
 
   /** Lock using the foreground window (hotkey path) or the last polled foreground (tray path on Windows). */
-  async function lockTarget({ fromTray = false, quiet = false } = {}) {
+  let locking = false;
+  async function lockTarget(opts = {}) {
+    if (locking) return false; // a confirm dialog may be open; ignore repeated hotkeys meanwhile
+    locking = true;
+    try {
+      return await lockTargetInner(opts);
+    } finally {
+      locking = false;
+    }
+  }
+  async function lockTargetInner({ fromTray = false, quiet = false } = {}) {
     await ensureMacAccessibility();
     let result;
     if (fromTray && platform.getLastForeground) {
@@ -244,7 +254,7 @@ async function main() {
 
   // ---------- auto mode ----------
   const scheduler = createScheduler({
-    config: config.auto,
+    config: () => config.auto, // getter so a config reload applies to the running session
     clock: { now: () => Date.now(), setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: (t) => clearTimeout(t) },
     rng: () => rng.next(),
     onFire: async ({ count, tier }) => {
@@ -309,14 +319,19 @@ async function main() {
   }
 
   // ---------- config persistence ----------
-  async function persist() {
-    config = { ...config, delivery: state.delivery, sound: { ...config.sound, muted: state.muted } };
-    try {
-      await saveConfig(cfgIo, config);
-      lastSavedJson = JSON.stringify(config);
-    } catch (err) {
-      log.error('config save failed', err.message);
-    }
+  let persistChain = Promise.resolve();
+  function persist() {
+    // Serialised: two quick tray toggles must not race on the same temp file.
+    persistChain = persistChain.then(async () => {
+      config = { ...config, delivery: state.delivery, sound: { ...config.sound, muted: state.muted } };
+      try {
+        await saveConfig(cfgIo, config);
+        lastSavedJson = JSON.stringify(config);
+      } catch (err) {
+        log.error('config save failed', err.message);
+      }
+    });
+    return persistChain;
   }
 
   // ---------- hotkeys ----------
@@ -334,7 +349,7 @@ async function main() {
   const tray = createTray(
     { Tray, Menu, nativeImage },
     path.join(ASSETS, 'icons'),
-    () => ({ ...state, target: targets.get() }),
+    () => ({ ...state, target: targets.get(), autoCount: scheduler.state().count }),
     {
       armWhip: () => armWhip({ fromTray: true }),
       dropWhip,

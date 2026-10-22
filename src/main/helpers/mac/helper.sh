@@ -29,15 +29,20 @@ fail() {
   exit "$1"
 }
 
+# Maps osascript error text to an error code and exits.
+fail_from_osascript() {
+  case "$1" in
+    *"not allowed assistive access"*|*"-1719"*|*"-25211"*) fail 2 "Accessibility permission required: $1" ;;
+    *"Not authorized to send Apple events"*|*"-1743"*) fail 2 "Automation permission required: $1" ;;
+    *"Can't get"*|*"Can’t get"*) fail 3 "No such process: $1" ;;
+    *) fail 1 "osascript failed: $1" ;;
+  esac
+}
+
 # Runs osascript with the given -e statements, captures stderr, maps known errors to codes.
 run_as() {
   err=$(osascript "$@" 2>&1 >/dev/null) && return 0
-  case "$err" in
-    *"not allowed assistive access"*|*"-1719"*|*"-25211"*) fail 2 "Accessibility permission required: $err" ;;
-    *"Not authorized to send Apple events"*|*"-1743"*) fail 2 "Automation permission required: $err" ;;
-    *"Can't get"*|*"Can’t get"*) fail 3 "No such process: $err" ;;
-    *) fail 1 "osascript failed: $err" ;;
-  esac
+  fail_from_osascript "$err"
 }
 
 # Prints three lines for a process: unix id, name, front window title (may be empty).
@@ -47,13 +52,7 @@ describe_script() {
 }
 
 describe() {
-  out=$(osascript -e "$(describe_script "$1")" 2>&1) || {
-    case "$out" in
-      *"not allowed assistive access"*|*"-1719"*|*"-25211"*) fail 2 "Accessibility permission required: $out" ;;
-      *"Can't get"*|*"Can’t get"*) fail 3 "No such process: $out" ;;
-      *) fail 1 "osascript failed: $out" ;;
-    esac
-  }
+  out=$(osascript -e "$(describe_script "$1")" 2>&1) || fail_from_osascript "$out"
   pid=$(printf '%s\n' "$out" | sed -n '1p')
   name=$(printf '%s\n' "$out" | sed -n '2p')
   title=$(printf '%s\n' "$out" | sed -n '3,$p')
@@ -61,14 +60,22 @@ describe() {
     "$pid" "$(json_str "$title")" "$(json_str "$name")" "${pid:-0}"
 }
 
+# Sets FG to the unix id of the frontmost process. Runs in the main shell (never a subshell) so a
+# permission error is reported as code 2 instead of being mistaken for "target gone".
 frontmost_pid() {
-  osascript -e 'tell application "System Events" to get unix id of first application process whose frontmost is true' 2>/dev/null
+  FG=$(osascript -e 'tell application "System Events" to get unix id of first application process whose frontmost is true' 2>&1) \
+    || fail_from_osascript "$FG"
 }
 
+# Sets n to the numeric pid from a "pid:<n>" id. Anything non-numeric is refused (code 3) so the
+# value can be interpolated into AppleScript source safely.
 pid_from_id() {
   case "$1" in
-    pid:*) printf '%s' "${1#pid:}" ;;
+    pid:*) n=${1#pid:} ;;
     *) fail 3 "window id must look like pid:<n>, got $1" ;;
+  esac
+  case "$n" in
+    ''|*[!0-9]*) fail 3 "window id must be numeric, got $1" ;;
   esac
 }
 
@@ -84,32 +91,49 @@ case "$cmd" in
     describe 'first application process whose frontmost is true'
     ;;
   info)
-    n=$(pid_from_id "${2:-}")
+    pid_from_id "${2:-}"
     describe "first application process whose unix id is $n"
     ;;
   focus)
-    n=$(pid_from_id "${2:-}")
+    pid_from_id "${2:-}"
     run_as -e "tell application \"System Events\" to set frontmost of (first application process whose unix id is $n) to true"
     i=0
     while [ "$i" -lt 5 ]; do
-      [ "$(frontmost_pid)" = "$n" ] && { printf '{"ok":true}\n'; exit 0; }
+      frontmost_pid
+      [ "$FG" = "$n" ] && { printf '{"ok":true}\n'; exit 0; }
       sleep 0.05
       i=$((i + 1))
     done
     fail 5 "process $n did not become frontmost"
     ;;
   type)
-    n=$(pid_from_id "${2:-}")
+    pid_from_id "${2:-}"
     enter=0
     [ "${3:-}" = "--enter" ] && enter=1
     text=$(cat)
-    [ "$(frontmost_pid)" = "$n" ] || fail 3 "target process $n is not frontmost"
-    # Chunk at 200 characters so a single keystroke call stays well inside osascript limits.
-    printf '%s\n' "$text" | fold -w 200 | while IFS= read -r chunk; do
+    # Chunk at 200 characters so a single keystroke call stays well inside osascript limits. The
+    # target is re-verified before every chunk, and Enter rides in the same osascript call as the
+    # last chunk, so a Cmd-Tab mid-message cannot send the remainder or the Enter elsewhere.
+    chunks=$(printf '%s\n' "$text" | fold -w 200)
+    total=$(printf '%s\n' "$chunks" | grep -c .)
+    i=0
+    while IFS= read -r chunk; do
       [ -n "$chunk" ] || continue
-      run_as -e 'on run argv' -e 'tell application "System Events" to keystroke (item 1 of argv)' -e 'end run' -- "$chunk"
-    done || exit $?
+      i=$((i + 1))
+      frontmost_pid
+      [ "$FG" = "$n" ] || fail 3 "target process $n is not frontmost"
+      if [ "$enter" -eq 1 ] && [ "$i" -eq "$total" ]; then
+        run_as -e 'on run argv' -e 'tell application "System Events"' -e 'keystroke (item 1 of argv)' -e 'key code 36' -e 'end tell' -e 'end run' -- "$chunk"
+        enter=0
+      else
+        run_as -e 'on run argv' -e 'tell application "System Events" to keystroke (item 1 of argv)' -e 'end run' -- "$chunk"
+      fi
+    done <<EOF_CHUNKS
+$chunks
+EOF_CHUNKS
     if [ "$enter" -eq 1 ]; then
+      frontmost_pid
+      [ "$FG" = "$n" ] || fail 3 "target process $n is not frontmost; Enter not sent"
       run_as -e 'tell application "System Events" to key code 36'
     fi
     printf '{"ok":true,"typed":%d}\n' "${#text}"

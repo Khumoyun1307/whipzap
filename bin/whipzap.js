@@ -42,17 +42,27 @@ if (typeof electronPath !== 'string') {
   process.exit(1);
 }
 
+const env = { ...process.env, ELECTRON_NO_ATTACH_CONSOLE: '1' };
+delete env.ELECTRON_RUN_AS_NODE; // some IDE terminals set it; it would run Electron as plain Node
+
 const child = spawn(electronPath, [appDir, ...passthrough], {
   detached: !foreground,
   stdio: foreground ? 'inherit' : 'ignore',
   windowsHide: true,
-  env: { ...process.env, ELECTRON_NO_ATTACH_CONSOLE: '1' },
+  env,
+});
+
+child.on('error', (err) => {
+  console.error(`Could not start WhipZap: ${err.message}`);
+  process.exit(1);
 });
 
 if (foreground) {
   child.on('exit', (code) => process.exit(code ?? 0));
 } else {
-  child.unref();
-  console.log('WhipZap started. Look for the whip icon in your tray.');
-  process.exit(0);
+  child.on('spawn', () => {
+    child.unref();
+    console.log('WhipZap started. Look for the whip icon in your tray.');
+    process.exit(0);
+  });
 }

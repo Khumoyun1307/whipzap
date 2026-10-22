@@ -10,8 +10,9 @@ export function registerHotkeys(globalShortcut, accelerators, handlers) {
   const registered = [];
   const failed = [];
   for (const [name, accelerator] of Object.entries(accelerators)) {
+    if (!Object.hasOwn(handlers, name)) continue; // never bind inherited names like "constructor"
     const handler = handlers[name];
-    if (!handler || !accelerator) continue;
+    if (typeof handler !== 'function' || !accelerator) continue;
     let ok;
     try {
       ok = globalShortcut.register(accelerator, handler);
