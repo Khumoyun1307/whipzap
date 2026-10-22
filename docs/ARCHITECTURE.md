@@ -79,8 +79,8 @@ Rules:
 
 1. Primary display only (`screen.getPrimaryDisplay()`), re-bounded on `screen` `display-metrics-changed`.
 2. Hidden (`win.hide()`) whenever no visual is active, so an idle WhipZap costs no GPU. Shown just before a strike or whip spawn, hidden 200 ms after the last animation ends.
-3. `setIgnoreMouseEvents(true, { forward: true })` while not in whip mode. In whip mode, `setIgnoreMouseEvents(false)` so the overlay sees mouse moves and clicks. On Windows a fully transparent region may still pass clicks through regardless of this flag, so in whip mode the canvas paints a `rgba(0,0,0,0.01)` full-screen fill (alpha 1/255) to remain hit-testable [ASSUMED, verify in M4].
-4. `focusable: false` is honoured on Windows and macOS. The overlay must never become the foreground window, otherwise the Windows helper would see it as the foreground process and the sanity check would fail. On Linux, `focusable` is not supported; we additionally call `win.blur()` after show and never call `win.focus()` [ASSUMED].
+3. `setIgnoreMouseEvents(true, { forward: true })` while not in whip mode. In whip mode, `setIgnoreMouseEvents(false)` so the overlay sees mouse moves and clicks; the canvas paints a `rgba(0,0,0,0.004)` full-screen fill each frame so Windows hit-tests the window. Mouse moves verified reaching the overlay on Windows 11 (2026-10-21).
+4. `focusable: false` except while the whip is armed (D-15). Verified on Windows 11: a non-activatable window receives mouse moves but no button presses, so `setMouseMode(true)` calls `win.setFocusable(true)` and `win.focus()`, and `setMouseMode(false)` restores `focusable: false`; app.js then re-focuses the locked target through the helper on drop. Outside whip mode the overlay never becomes the foreground window (`showInactive()`), so the helper never sees it as the target. Click-to-drop after this change is UNVERIFIED (see docs/SMOKE-RESULTS.md W-09). On Linux, `focusable` is not supported; `win.blur()` after show [ASSUMED].
 5. `type: 'panel'` and `'toolbar'` window types are not used; `screen-saver` level is sufficient for showing above full-screen apps on macOS when combined with `visibleOnFullScreen: true`. Shows over the macOS Dock and Windows taskbar.
 
 ## 3. IPC contract
@@ -204,9 +204,9 @@ export function createTargetStore({ platform, confirm, selfPid })
    // exists(): await platform.getWindowInfo(id); HelperError code 3 → false
 ```
 
-Lock points:
+Lock points (D-14: this list is exhaustive; nothing else may lock):
 
-1. Hotkey "arm whip": lock the window that is foreground at the moment of the keypress.
+1. Hotkey "arm whip" and hotkey "toggle auto" with no target: lock the window that is foreground at the moment of the keypress.
 2. Tray "Arm whip", "Lock target", "Auto mode", "Crack now" with no target: lock from the tray path described in item 4.
 3. Hotkey "Crack now" with no target: lock first (the foreground window at keypress), then crack.
 4. Tray path per OS. On Windows, clicking the tray gives the taskbar (explorer.exe) the foreground, so `win.js` keeps a `lastForeground` value by polling the warm worker every 1000 ms, ignoring WhipZap's own pid and `explorer.exe`; tray locks use `platform.lastForeground`. On macOS and Linux, menu bar extras and tray menus do not activate the app, so the foreground is read at menu-click time.
@@ -332,8 +332,8 @@ There is no `listWindows`, no separate `pressEnter`, and no `windowExists`: `typ
 
 | Transition | Trigger | Preconditions | Effects |
 |---|---|---|---|
-| lock | hotkey armWhip, tray Lock target, hotkey crack with no target | foreground is not self | `target` set; toast "Target locked: <title>"; tray icon → locked |
-| unlock | target verify fails during crack | | `target=null`; toast "Target window closed"; autoOn → false |
+| lock | hotkey crack, hotkey armWhip, hotkey toggleAuto, tray Crack now, Arm whip, Auto mode, Lock target (each only when no target is set). Never a whip-mode or auto crack (D-14) | foreground is not self | `target` set; toast "Target locked: <title>"; tray icon → locked |
+| unlock | target verify fails during crack (any source) | | `target=null`; toast "Target window closed"; autoOn → false; whipArmed → false (whip dropped) |
 | arm | hotkey armWhip, tray Arm whip | not armed | lock if needed; `whipArmed=true`; scheduler.pause(); overlay spawnWhip; icon → armed |
 | drop | hotkey armWhip, tray Arm whip (uncheck), overlay click, overlay dropped | armed | `whipArmed=false`; scheduler.resume(); icon → locked or idle |
 | crack | hotkey crack, tray Crack now, overlay cracked, scheduler fire | not already cracking | section 5.2 |
@@ -476,15 +476,15 @@ Returns `isSupported → { ok:false, reason:'Unsupported platform' }`; every oth
 | Segment length | `min(w,h) / 45` px | Scales with display. |
 | Integration | Verlet, fixed step 1000/120 ms, accumulator from `requestAnimationFrame` delta | Fixed step makes feel independent of refresh rate (fixes the class of bug in OpenWhip issue #61). |
 | Constraint iterations | 12 | |
-| Gravity | `0.35 * segmentLength` px per step² | |
-| Damping | 0.992 per step | |
+| Gravity | `0.02 * segmentLength` px per step² | 0.35 (original assumption) gave terminal speeds near 100,000 px/s and cracked on every swing. |
+| Damping | 0.975 per step | 0.992 let a free swing keep cracking for 6 s after the last flick (observed 2026-10-21). |
 | Bend limit | 20° at handle rising linearly to 140° at tip | Prevents the rope folding on itself. |
 | Handle | pinned to the last mouse position each step | |
 | Walls | tip and segments clamp to display bounds with 0.4 restitution | |
 | Tip speed | distance moved by the last segment per fixed step, in px per step, averaged over 3 steps | |
-| Crack threshold | `tipSpeed > 0.9 * segmentLength * 28 / 4` px per step, which is roughly 6.3 segment lengths per step [ASSUMED, tune in M4 so a confident wrist flick cracks and slow waving does not] | |
+| Crack threshold | `tipSpeed > crackFactor * segmentLength` px per step, `crackFactor` default 3.5 (`config.whip.crackFactor`, 0.5 to 20) | 6.3 was unreachable: a 400 px head jump reaches about 3.5 segment lengths per step through 28 constrained segments. Default chosen against synthetic input; human tuning owed (ROADMAP section 11). |
 | Grace after spawn | 400 ms | No cracks. |
-| Cooldown | 250 ms | Between cracks. |
+| Cooldown | 600 ms, `config.whip.cooldownMs` (100 to 10000) | Between cracks; 250 ms produced machine-gun cracks under continuous motion. `crack.js` adds its own 300 ms busy guard. |
 | Drop | handle unpinned, gravity ×3, hide when all segments are below the display bottom or after 1.5 s | |
 
 Drawing: Catmull-Rom spline through segment points, two strokes: 7 px light halo (`rgba(255,255,255,0.55)`) under a 3 px dark core (`#15110c`), handle drawn as a 10 px rounded rectangle at the cursor. Crack flash at the tip: 120 ms radial burst, 60 px radius.
@@ -545,9 +545,15 @@ File: `app.getPath('userData')/config.json` → `%APPDATA%\whipzap\config.json`,
   },
   "target": {
     "allowPatterns": []                     // extra case-insensitive substrings or "/regex/i" strings; merged with defaults
+  },
+  "whip": {
+    "crackFactor": 3.5,                     // number 0.5..20, tip speed to crack in segment lengths per step
+    "cooldownMs": 600                       // integer 100..10000
   }
 }
 ```
+
+The `WHIPZAP_USER_DATA` environment variable overrides the directory (app.js calls `app.setPath('userData', ...)` before ready) for portable installs and tests.
 
 Validation rules (`validateConfig`): unknown keys are ignored and preserved on save; wrong types are replaced by defaults and reported; `hotkeys.*` must match `/^[A-Za-z0-9+]+$/`; `messages.extra[].text` goes through the pack rules in section 10; `version` other than 1 → error, defaults used. Errors are surfaced once as a toast and in the log.
 
@@ -558,6 +564,8 @@ windowsterminal, wt.exe, cmd.exe, powershell, pwsh, conhost, mintty, alacritty, 
 ```
 
 `terminal` also matches "Terminal.app" and "Windows Terminal" titles; `code` matches `Code.exe`, `Code - Insiders`, and the Electron process name `code`.
+
+Never-lock rule (D-14): a crack whose `source` is `whip` or `auto` and finds no target does not call `lockForeground`; `crack.js` plays sound and visual and toasts "No target locked". `app.js` enforces this in `crackFrom(source)` (`mayLock = source === 'hotkey' || source === 'tray'`). When a target is lost (`exists()` false or helper code 3), `onTargetLost` turns auto mode off and drops the whip.
 
 ## 10. Message pack schema
 
@@ -710,3 +718,9 @@ Implemented as a tiny `src/main/log.js` with `info/debug/error` that prefixes a 
 6. `auto.sessionCap` clamp is 1..500 (was 1..1000). Reason: align with TESTING CFG-08.
 7. Tier rule decided: hotkey and tray mild, whip medium, auto by count; any crack while auto is on counts toward the auto session.
 8. Tray lock on Windows uses a 1000 ms `lastForeground` poll in `win.js`; macOS and Linux read the foreground at click time. Reason: replaces the 500 ms tray-open poll assumption.
+9. Lock points are exhaustive (4.5, 5.1): whip-mode and auto cracks never lock; a lost target drops the whip and stops auto (D-14). Reason: a closed fixture during whip mode let the next flick lock and type into the operator's editor.
+10. Overlay is focusable only while the whip is armed (2.1, D-15). Reason: no mouse button events reached the non-activatable window on Windows 11.
+11. Rope constants (7.1): gravity 0.02, damping 0.975, crack factor 3.5 via `config.whip.crackFactor`, cooldown 600 ms via `config.whip.cooldownMs`. Reason: measured behaviour on 2026-10-21; the assumed values cracked on their own.
+12. Config gains a `whip` section (9) and the `WHIPZAP_USER_DATA` override. Reason: tuning knob and test isolation.
+13. `src/main/toast.js` was not created; `toast()` is a closure in app.js. `src/main/log.js` added. Reason: size.
+14. Self-test accepts `WHIPZAP_SELFTEST_CAPTURE` (renderer capture) and `WHIPZAP_SELFTEST_SCREEN` (desktopCapturer screen capture) for diagnostics; GDI screenshots cannot see the overlay because the window has `WS_EX_NOREDIRECTIONBITMAP`. Reason: verification needed real-screen evidence.

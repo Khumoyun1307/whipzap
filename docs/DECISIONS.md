@@ -160,6 +160,26 @@ WhipZap never sends Ctrl-C, Esc, or any control key other than Enter.
 
 **Consequences.** If a future Windows build refuses focus via `AttachThreadInput`, the helper reports code 5 and the crack shows "Could not focus target" rather than trying a modifier-key trick.
 
+## D-14 Only explicit user actions lock a target
+
+**Context.** During end-to-end testing on 2026-10-21 the fixture window closed while whip mode was armed. WhipZap reported the target gone, but the next flick had no target and the crack path locked the current foreground window (the operator's VS Code) and typed six taunts into it. Decision D-2 says text goes only to a window the user chose; a whip flick or a timer is not a choice of window.
+
+**Decision.** The lock points are exhaustive: crack hotkey or tray Crack now when nothing is locked, Arm whip, Auto mode toggle when nothing is locked, and Lock target. A crack with source `whip` or `auto` never locks; without a target it plays sound and visual and toasts "No target locked". When the target is lost, auto mode turns off and the whip drops.
+
+**Alternatives rejected.** Re-locking the foreground on any crack (the behaviour that caused the incident); prompting on every whip-mode crack (unusable).
+
+**Consequences.** `app.js` gates locking on the crack source; `onTargetLost` drops the whip. Documented in ARCHITECTURE 4.5 and 5.1, PRD FR-02, SECURITY.md.
+
+## D-15 Overlay focusable only while the whip is armed
+
+**Context.** The overlay is `focusable: false` so it never becomes the foreground window the helper would type into. On Windows 11 that window received mouse moves (flicks cracked) but no mouse button events, so click-to-drop never fired.
+
+**Decision.** `setMouseMode(true)` (arming) calls `setFocusable(true)` and `focus()`; `setMouseMode(false)` (drop) restores `focusable: false`, and app.js re-focuses the locked target through the helper so the user's terminal has the keyboard again. Outside whip mode nothing changes.
+
+**Alternatives rejected.** Keeping the overlay non-focusable and dropping only via hotkey or tray (loses the natural gesture); a separate invisible input window (more surface for the same result).
+
+**Consequences.** While armed, the overlay may be the foreground window; a crack still re-focuses the target before typing, so typing is unaffected. Click-to-drop after this change is UNVERIFIED (docs/SMOKE-RESULTS.md W-09).
+
 ---
 
 ## Open items (require owner decision)

@@ -148,9 +148,10 @@ The message typed is exactly the message shown, with the `/btw ` prefix added wh
 
 1. Entering: the overlay appears on the primary display, the system cursor is hidden over the overlay (`cursor: none`), and a rope spawns hanging from the cursor position with a 300 ms unfurl (segments start stacked at the handle and settle under gravity).
 2. Appearance: a 3 px dark core (`#15110c`) over a 7 px pale halo (`rgba(255,255,255,0.55)`), slight taper towards the tip, a 10 px by 26 px rounded handle at the cursor in `#3a2a1a` with a lighter `#6b4a2b` grip band.
-3. Cracking: a fast flick makes the tip exceed the crack threshold. A 120 ms burst (radius 60 px) fires at the tip, the crack sound plays, and the message and typing run as in section 6. Cooldown 250 ms; no cracks in the first 400 ms after spawn.
+3. Cracking: a fast flick makes the tip exceed the crack threshold (`whip.crackFactor`, default 3.5 segment lengths per step). A 120 ms burst (radius 60 px) fires at the tip, the crack sound plays, and the message and typing run as in section 6. Cooldown 600 ms (`whip.cooldownMs`); no cracks in the first 400 ms after spawn. The rope settles within about a second after you stop moving, so it never cracks on its own.
 4. The rope reacts to screen edges with a soft bounce and never leaves the display.
-5. Dropping: any mouse button down on the overlay, the arm hotkey, or unchecking `Arm whip` in the tray. The handle releases, the rope falls off the bottom of the screen under triple gravity, the cursor returns, and the overlay hides. Toast `Whip dropped` is not shown; the visual is enough.
+5. Dropping: any mouse button down on the overlay, the arm hotkey, or unchecking `Arm whip` in the tray. The handle releases, the rope falls off the bottom of the screen under triple gravity, the cursor returns, the overlay hides, and keyboard focus goes back to the locked target. Toast `Whip dropped` is not shown; the visual is enough. Click-to-drop is UNVERIFIED on Windows as of 2026-10-21 (docs/SMOKE-RESULTS.md W-09); the hotkey and tray paths are verified.
+   If the locked window closes while the whip is armed, the whip drops by itself and a `Target window closed` toast appears; the next flick never locks another window (D-14).
 6. There is no Esc handling. The overlay never listens for Esc and WhipZap never sends Esc anywhere.
 7. Auto mode is paused while the whip is armed and resumes on drop.
 8. Multi-monitor: the rope lives on the primary display only. Moving the mouse to another display leaves the handle at the display edge [v1 limitation, documented].
@@ -304,10 +305,16 @@ Shown in the README and created with defaults on first run. Users can copy this 
 }
 ```
 
-Note for the README: JSON with comments is shown for readability; the real file must be plain JSON without comments [ASSUMED: the loader does not strip comments. If M2 finds this too hostile, allow `//` line comments via a tiny stripper and change this note].
+Note for the README: JSON with comments is shown for readability; the real file must be plain JSON without comments (the loader does not strip comments; decided in M2). Two keys were added after this example was written and belong in the README reference: `"whip": { "crackFactor": 3.5, "cooldownMs": 600 }`. The `WHIPZAP_USER_DATA` environment variable moves the whole config directory.
 
 ## 13. Copy and tone
 
 1. Taunts are aimed at the agent and are theatrical, not cruel. Nothing targets a person, a nationality, a gender, a profession, or a company.
 2. Toasts and dialogs are plain, short, and tell the user what to do next.
 3. The word "Claude" never appears in the app name, icon, tray, or package name (D-10). It appears only in documentation where Claude Code behaviour is explained.
+
+## Deviations (2026-10-21)
+
+1. Section 7.3: cooldown 600 ms and configurable crack factor replace 250 ms and the fixed threshold. Reason: continuous motion produced cracks every 300 ms, each typing a line.
+2. Section 7.5: lost target drops the whip (D-14); focus returns to the target on drop (D-15); click-to-drop marked UNVERIFIED.
+3. Section 12: `whip` keys and `WHIPZAP_USER_DATA` noted.

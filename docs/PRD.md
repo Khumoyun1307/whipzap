@@ -178,7 +178,7 @@ As a Linux user on X11, I want WhipZap to work if `xdotool` is installed and tel
 | ID | Requirement | Label |
 |----|-------------|-------|
 | FR-01 | Maintain at most one locked target: `{ id, processName, title, pid }` (`id` is the platform window id as a string). | [APPROVED] |
-| FR-02 | Lock the foreground window on arm-whip, on instant crack when unlocked, and on tray `Lock target`. | [APPROVED] |
+| FR-02 | Lock the foreground window only on these user actions: crack hotkey or tray `Crack now` when unlocked, `Arm whip`, `Auto mode` toggle when unlocked, and tray `Lock target`. A whip-mode or auto crack never locks a window; without a target it plays sound and visual and toasts `No target locked`. A lost target drops the whip and turns auto mode off (D-14). | [APPROVED] |
 | FR-03 | Sanity-check the candidate against `target.allowPatterns` (case-insensitive substring or regex on process name and title). Default patterns cover: Windows Terminal, cmd, powershell, pwsh, conhost, mintty, alacritty, wezterm, kitty, ghostty, hyper, Terminal.app, iTerm2, Warp, VS Code, Code - Insiders, Cursor, Windsurf, JetBrains IDEs (idea, pycharm, webstorm, rider, goland, clion, phpstorm, rubymine, datagrip), gnome-terminal, konsole, xterm, tilix. | [APPROVED] |
 | FR-04 | Non-matching candidate: native confirm dialog once per window per session (AC-02-4). | [APPROVED] |
 | FR-05 | Before typing, re-focus the locked window by id; verify the foreground window equals the target before sending keys. | [APPROVED] |
@@ -391,6 +391,8 @@ All [FUTURE] unless marked excluded.
 | D-11 Clean-room | NFR-09, NFR-10 |
 | D-12 Persistent Windows helper worker | FR-43, NFR-02 |
 | D-13 No synthesized modifier keys | FR-09, AC-05-4 |
+| D-14 Only explicit user actions lock a target | FR-02, FR-06 |
+| D-15 Overlay focusable only while armed | FR-36, FR-37 |
 
 ## Deviations (2026-10-21)
 
@@ -403,3 +405,6 @@ All [FUTURE] unless marked excluded.
 7. FR-38: toasts render on the overlay, never as native notifications. Reason: ARCHITECTURE and UX agree; native notifications are inconsistent across platforms.
 8. FR-42, FR-43, FR-47, FR-01, FR-05, NFR-13: adapter contract, helper paths, worker design and `id` field match the verified implementation; AC-06-1 uses the lock-first flow.
 9. Assumptions 3 and 5 resolved by the 2026-10-21 spike and sound sourcing.
+10. FR-02 tightened (D-14): whip-mode and auto cracks never lock. Reason: incident during testing, see docs/SMOKE-RESULTS.md.
+11. FR-36: the overlay is non-focusable except while the whip is armed (D-15). Reason: Windows delivers no mouse buttons to a non-activatable window.
+12. FR-29: config gains `whip.crackFactor` and `whip.cooldownMs`; `WHIPZAP_USER_DATA` overrides the config directory.

@@ -124,6 +124,9 @@ Pack format and tier rules are defined in docs/UX.md. The module exposes `loadPa
 | CFG-09 | Volume bounds | `volume: 7` clamps to 1. `volume: -1` clamps to 0 |
 | CFG-10 | Save round trip | `saveConfig` then `loadConfig` returns an equal object |
 | CFG-11 | allowPatterns type | Non-array `target.allowPatterns` falls back to default list with a warning |
+| CFG-12 | whip defaults | Missing `whip` yields `{ crackFactor: 3.5, cooldownMs: 600 }` |
+| CFG-13 | whip clamps | `whip.crackFactor: 0.1` clamps to 0.5, `100` clamps to 20; `whip.cooldownMs: 10` clamps to 100, `99999` clamps to 10000; each with a warning |
+| CFG-14 | whip types | Non-number `whip.crackFactor` or non-object `whip` falls back to defaults with a warning |
 
 ### 2.7 target.test.js
 
@@ -215,6 +218,20 @@ No automated self-test. Verified by the manual checklist in section 6 and marked
 - Linux helper `src/main/helpers/linux/helper.sh` checks `command -v xdotool` and exits 4 with `xdotool not found` if missing. It uses `xdotool windowactivate --sync <id>`, `xdotool type --delay 8 --clearmodifiers` with the text from stdin, `xdotool key Return` when `--enter`.
 - Linux helper detects Wayland via `XDG_SESSION_TYPE=wayland` (or `WAYLAND_DISPLAY` set with `DISPLAY` unset) and exits 4 with `Wayland is not supported`, which the app surfaces as a toast.
 
+### 3.4 Windows end-to-end script: test/helpers/win-e2e.ps1
+
+Manual tool for the dev machine. Run from a normal (non-sandboxed) PowerShell window on a machine nobody is using, because it presses global hotkeys:
+
+```
+powershell -NoProfile -STA -ExecutionPolicy Bypass -File test/helpers/win-e2e.ps1 [-SkipAuto]
+```
+
+What it does: starts WhipZap with `WHIPZAP_USER_DATA` pointing at a throwaway config (`auto.baseIntervalSec` 20, `jitterSec` 0, `sessionCap` 2, `seed` 7), starts the screenshot helper `test/helpers/screenshot.cjs` (a second Electron process that captures the primary display through `desktopCapturer` when a trigger file appears; GDI and Print Screen cannot see the overlay), opens the WinForms fixture, and then drives the three triggers with simulated input: Ctrl+Alt+W (hotkey crack), Ctrl+Alt+Shift+W plus fast `SetCursorPos` sweeps and a `mouse_event` click (whip mode), and Ctrl+Alt+A followed by a 46 s wait (auto mode). It prints the fixture text, the filtered app log, and saves `test/helpers/_e2e-shots/{before,strike,rope,whipcrack,auto}.png`.
+
+Safety guard: before every hotkey the script brings the fixture to the foreground with `run-helper.mjs focus` and aborts if `run-helper.mjs foreground` does not report the fixture. Without this guard the first runs on 2026-10-21 typed into the operator's editor (docs/SMOKE-RESULTS.md, Incidents). The fixture must outlive every phase (70 s with `-SkipAuto`, 110 s otherwise).
+
+Expected (recorded 2026-10-21): fixture receives `FASTER!` from the hotkey, several medium-tier lines from whip mode, and two mild lines from auto mode, each followed by CRLF; app log shows `Target locked: WhipZap typing fixture`, `whip armed`, `whip cracked`, `whip dropped`, `Auto mode on`, `auto fire 1`, `auto fire 2`, `Auto session cap reached (2)`.
+
 ---
 
 ## 4. Overlay smoke test (L3) [ASSUMED]
@@ -253,7 +270,7 @@ Preconditions: Node 20 or later, `npm install -g whipzap` or `npm ci` in a clone
 - [ ] W-06 Focus Slack, Notepad, or a browser. Press Ctrl+Alt+W. Expected: dialog "Whip this window? <title>". Choose No. Expected: toast "No target locked", nothing typed.
 - [ ] W-07 Repeat W-06 and choose Yes. Expected: message typed into that window. Then use Lock target on a terminal to move the lock back.
 - [ ] W-08 Lock a terminal, close it, press Ctrl+Alt+W. Expected: sound and strike, toast "Target window closed", lock cleared.
-- [ ] W-09 Press Ctrl+Alt+Shift+W. Expected: cursor hidden, rope hangs from the cursor on the primary display. Flick the mouse fast. Expected: crack, message typed into the locked target. Click. Expected: rope drops off screen, cursor returns.
+- [ ] W-09 Press Ctrl+Alt+Shift+W. Expected: cursor hidden, rope hangs from the cursor on the primary display. Flick the mouse fast. Expected: crack, message typed into the locked target; slow circles for 10 s produce no crack; after you stop moving the rope settles without cracking. Click. Expected: rope drops off screen, cursor returns, the terminal has focus again. If the click does nothing, record it and drop with Ctrl+Alt+Shift+W. Close the locked terminal while armed. Expected: toast "Target window closed", whip drops, nothing is typed anywhere.
 - [ ] W-10 Press Ctrl+Alt+A. Expected: toast "Auto mode on". Wait. Expected: cracks arrive at irregular intervals, never closer than 20 seconds, messages escalate from mild to medium after the 5th crack. Toggle off with Ctrl+Alt+A. Expected: toast "Auto mode off", no further cracks.
 - [ ] W-11 Set `auto.sessionCap` to 3 and `auto.baseIntervalSec` to 20 in config, restart, enable auto. Expected: exactly 3 cracks, then toast "Auto session cap reached (3)" and the tray item unchecks.
 - [ ] W-12 Mute in tray. Crack. Expected: no sound, visual and typing still happen.
@@ -355,17 +372,17 @@ Rules:
 
 ## 9. Release gate checklist (v0.1.0)
 
-- [ ] R-01 CI green on ubuntu, windows, macos for the release commit.
-- [ ] R-02 Windows checklist 6.1 fully executed and recorded in `docs/SMOKE-RESULTS.md`.
-- [ ] R-03 macOS checklist 6.2 executed by a human, or the release notes state "macOS: untested on hardware, Accessibility flow verified by code review only".
-- [ ] R-04 Linux checklist 6.3 executed, or release notes state Linux X11 is best-effort and untested.
-- [ ] R-05 `npm pack --dry-run` lists only: `bin/`, `src/` (which contains `src/main/helpers/`), `assets/`, `package.json`, `README.md`, `LICENSE`. No `test/`, no `docs/`, no `.github/`, no `scripts/`.
-- [ ] R-06 `assets/CREDITS.md` names the source and license (CC0) of every sound and icon.
-- [ ] R-07 README states exactly what a crack does to the agent (queued message or /btw side question) and that it never interrupts.
-- [ ] R-08 `package.json` version is `0.1.0`, `CHANGELOG.md` has a `0.1.0` section.
-- [ ] R-09 `npm run lint:keys` passes.
+- [x] R-01 CI green on ubuntu, windows, macos: https://github.com/Khumoyun1307/whipzap/actions/runs/39728972289 (commit 5ddcd37, 2026-10-21).
+- [ ] R-02 Windows checklist 6.1: partially executed (6 pass, 2 partial, 12 not run), recorded in `docs/SMOKE-RESULTS.md`. Remaining items need a human at the keyboard.
+- [x] R-03 macOS: not executed; CHANGELOG.md and README.md state "untested on hardware, Accessibility flow verified by code review only".
+- [x] R-04 Linux: not executed; CHANGELOG.md and README.md state Linux X11 is best-effort and untested.
+- [x] R-05 `npm pack --dry-run` 2026-10-21: 51 files, 158 kB, only `bin/`, `src/`, `assets/` (icons, three WAVs, messages, CREDITS.md), `package.json`, `README.md`, `LICENSE`, `CHANGELOG.md`. No `test/`, `docs/`, `.github/`, raw downloads.
+- [x] R-06 `assets/CREDITS.md` names source, author, license (CC0), SHA-256 and edits for every sound; icons are project-drawn.
+- [x] R-07 README section "What a crack does to your agent" states it (queued message or /btw side question, never interrupts).
+- [x] R-08 `package.json` version `0.1.0`; `CHANGELOG.md` has a `0.1.0 - 2026-10-21` section.
+- [x] R-09 `npm run lint:keys` passes locally and in CI.
 - [ ] R-10 No file under the repo was copied from OpenWhip. Reviewer confirms by reading `src/main/helpers/`, `src/overlay/rope.js`, and `assets/`.
-- [ ] R-11 Tag `v0.1.0` created only after the owner approves publishing. No `npm publish` without explicit owner approval.
+- [ ] R-11 Tag `v0.1.0` and `npm publish` wait for explicit owner approval. Not done.
 
 ---
 
@@ -378,3 +395,5 @@ Rules:
 5. Module APIs in 2.2 to 2.8 updated to the final signatures in docs/ARCHITECTURE.md section 4 (`createTargetStore`, `createCrack(deps).crack({ source })`, `typeText(id, text, { pressEnter })`).
 6. Toast strings aligned to docs/UX.md section 8 verbatim (W-11, W-14, W-20, L-01, L-04).
 7. `lint:keys` also forbids `VK_MENU` (synthesized Alt), per D-13.
+8. Section 3.4 added: `win-e2e.ps1` and `screenshot.cjs` (2026-10-21). CFG-12 to CFG-14 added for the `whip` config section. W-09 extended with the never-lock and settle expectations (D-14, tuning).
+9. Section 3.2 numbers: `npm run test:win` passed once on 2026-10-21 (354 ms typing, emoji included); the three-consecutive-runs criterion is still owed.
