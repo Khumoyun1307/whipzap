@@ -5,7 +5,7 @@
 export const STEP_MS = 1000 / 120;
 const MAX_FRAME_MS = 100;
 const CONSTRAINT_ITERATIONS = 12;
-const DAMPING = 0.992;
+const DAMPING = 0.975; // settles a free swing in about a second so the rope does not crack on its own
 const RESTITUTION = 0.4;
 const UNFURL_MS = 300;
 const BEND_MIN_DEG = 20;
@@ -19,7 +19,7 @@ const GRAVITY_FACTOR = 0.02;
 // which a 400 px cursor jump cannot reach through 28 constrained segments. 2.5 segment lengths per step
 // (about 7,200 px/s tip speed at 1080p) is reachable by a confident wrist flick and not by slow waving.
 // [ASSUMED, tune in M4]
-const DEFAULT_CRACK_FACTOR = 2.5;
+const DEFAULT_CRACK_FACTOR = 3.5;
 
 /**
  * @param {{x:number,y:number,segments?:number,segmentLength:number,width:number,height:number,crackFactor?:number}} opts

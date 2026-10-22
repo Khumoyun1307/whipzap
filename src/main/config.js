@@ -42,6 +42,10 @@ export const DEFAULT_CONFIG = deepFreeze({
   target: {
     allowPatterns: [],
   },
+  whip: {
+    crackFactor: 3.5, // tip speed needed to crack, in rope segment lengths per physics step
+    cooldownMs: 600, // minimum time between whip-mode cracks
+  },
 });
 
 /**
@@ -155,6 +159,35 @@ export function validateConfig(obj) {
       }
     } else {
       warnings.push('auto must be an object; using defaults');
+    }
+  }
+
+  // whip (mouse mode tuning)
+  if (obj.whip !== undefined) {
+    if (obj.whip && typeof obj.whip === 'object') {
+      for (const key of Object.keys(obj.whip)) {
+        if (!(key in DEFAULT_CONFIG.whip)) warnings.push(`unknown whip key "${key}" ignored`);
+      }
+      if (obj.whip.crackFactor !== undefined) {
+        if (typeof obj.whip.crackFactor === 'number' && Number.isFinite(obj.whip.crackFactor)) {
+          const clamped = Math.min(20, Math.max(0.5, obj.whip.crackFactor));
+          if (clamped !== obj.whip.crackFactor) warnings.push(`whip.crackFactor clamped to ${clamped}`);
+          config.whip.crackFactor = clamped;
+        } else {
+          warnings.push('whip.crackFactor must be a number; using default');
+        }
+      }
+      if (obj.whip.cooldownMs !== undefined) {
+        if (typeof obj.whip.cooldownMs === 'number' && Number.isFinite(obj.whip.cooldownMs)) {
+          const clamped = Math.round(Math.min(10000, Math.max(100, obj.whip.cooldownMs)));
+          if (clamped !== obj.whip.cooldownMs) warnings.push(`whip.cooldownMs clamped to ${clamped}`);
+          config.whip.cooldownMs = clamped;
+        } else {
+          warnings.push('whip.cooldownMs must be a number; using default');
+        }
+      }
+    } else {
+      warnings.push('whip must be an object; using defaults');
     }
   }
 

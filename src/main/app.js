@@ -23,6 +23,8 @@ const SOUNDS = ['crack-1.wav', 'crack-2.wav', 'crack-3.wav'];
 const SELFTEST = process.argv.includes('--whipzap-selftest');
 
 app.setName('whipzap');
+// WHIPZAP_USER_DATA overrides the config directory (portable installs, tests).
+if (process.env.WHIPZAP_USER_DATA) app.setPath('userData', process.env.WHIPZAP_USER_DATA);
 protocol.registerSchemesAsPrivileged([{ scheme: 'whipzap-asset', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }]);
 
 if (!SELFTEST && !app.requestSingleInstanceLock()) {
@@ -190,14 +192,19 @@ async function main() {
     clock: { now: () => Date.now(), sleep: (ms) => new Promise((r) => setTimeout(r, ms)) },
     log,
     onTargetLost() {
+      // The window being whipped is gone: stop everything that would keep cracking at nothing.
       if (state.autoOn) stopAuto('lost');
+      if (state.whipArmed) dropWhip();
       tray.refresh();
     },
   };
   const { crack } = createCrack(crackDeps);
 
   async function crackFrom(source, { fromTray = false } = {}) {
-    if (!targets.get()) {
+    // Only explicit user actions may lock a target (D-2). Whip-mode and auto cracks never lock
+    // whatever happens to be in the foreground; without a target they play sound and visual only.
+    const mayLock = source === 'hotkey' || source === 'tray';
+    if (!targets.get() && mayLock) {
       const ok = await lockTarget({ fromTray, quiet: true });
       if (!ok) {
         pendingSource = source;
@@ -219,15 +226,19 @@ async function main() {
     scheduler.pause();
     overlay.show();
     overlay.setMouseMode(true);
-    overlay.send('overlay:spawnWhip', { seed: Math.floor(rng.next() * 2 ** 31) });
+    overlay.send('overlay:spawnWhip', { seed: Math.floor(rng.next() * 2 ** 31), crackFactor: config.whip.crackFactor, cooldownMs: config.whip.cooldownMs });
+    log.info('whip armed');
     tray.refresh();
   }
   function dropWhip() {
     if (!state.whipArmed) return;
+    log.info('whip dropped');
     state.whipArmed = false;
     overlay.setMouseMode(false);
     overlay.send('overlay:dropWhip', {});
     if (state.autoOn) scheduler.resume();
+    const target = targets.get();
+    if (target) platform.focusWindow(target.id).catch((err) => log.debug('refocus after drop failed', err.message));
     tray.refresh();
   }
 
@@ -250,6 +261,7 @@ async function main() {
     },
   });
   async function toggleAuto({ fromTray = false } = {}) {
+    log.info('toggleAuto', state.autoOn ? 'off' : 'on');
     if (state.autoOn) return stopAuto('user');
     if (!targets.get() && !(await lockTarget({ fromTray }))) {
       toast('No target locked', 2500);
@@ -275,10 +287,11 @@ async function main() {
   function onOverlayMessage(channel, payload) {
     switch (channel) {
       case 'overlay:cracked':
-        log.debug('whip cracked', payload);
+        log.info('whip cracked', JSON.stringify(payload));
         crackFrom('whip');
         break;
       case 'overlay:clicked':
+        log.info('overlay clicked');
         dropWhip();
         break;
       case 'overlay:dropped':
@@ -428,18 +441,35 @@ async function runSelfTest() {
     },
   );
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const deadline = Date.now() + 4000;
+  const deadline = Date.now() + 15000;
   while (!overlay.isReady() && Date.now() < deadline) await sleep(50);
   if (!overlay.isReady()) {
     log.error('selftest: overlay never reported ready');
     app.exit(1);
     return;
   }
+  log.info('displays', JSON.stringify(screen.getAllDisplays().map((d) => ({ id: d.id, bounds: d.bounds, scale: d.scaleFactor }))), 'primary', screen.getPrimaryDisplay().id);
   overlay.show();
   overlay.send('overlay:toast', { text: 'WhipZap self-test', ms: 1500 });
   overlay.send('overlay:playSound', { file: SOUNDS[0], volume: 0.5 });
   overlay.send('overlay:strike', { message: 'SELFTEST', tier: 'mild', prefix: '', seed: 42, whip: false });
-  await sleep(700);
+  log.info('overlay hwnd', overlay.nativeHandle());
+  await sleep(350);
+  if (process.env.WHIPZAP_SELFTEST_CAPTURE) {
+    const png = await overlay.capture();
+    if (png) await fs.writeFile(process.env.WHIPZAP_SELFTEST_CAPTURE, png);
+    log.info('captured overlay to', process.env.WHIPZAP_SELFTEST_CAPTURE, png?.length, 'bytes');
+  }
+  if (process.env.WHIPZAP_SELFTEST_SCREEN) {
+    // Real screen capture through the OS capture API (GDI screenshots cannot see DirectComposition windows).
+    const { desktopCapturer } = await import('electron');
+    const { width, height } = screen.getPrimaryDisplay().size;
+    const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width, height } });
+    const shot = sources[0]?.thumbnail?.toPNG();
+    if (shot) await fs.writeFile(process.env.WHIPZAP_SELFTEST_SCREEN, shot);
+    log.info('captured screen to', process.env.WHIPZAP_SELFTEST_SCREEN, shot?.length, 'bytes');
+  }
+  await sleep(350);
   overlay.setMouseMode(true);
   overlay.send('overlay:spawnWhip', { seed: 7 });
   await sleep(400);

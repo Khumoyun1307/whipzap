@@ -110,6 +110,7 @@ export function createOverlayWindow(electron, appRoot, { log, onMessage }) {
     const b = bounds();
     if (win.getBounds().width !== b.width || win.getBounds().height !== b.height) win.setBounds(b);
     if (!win.isVisible()) win.showInactive();
+    log.debug('overlay show', JSON.stringify(win.getBounds()), 'visible', win.isVisible());
   }
 
   function hideSoon(ms = 200) {
@@ -122,7 +123,12 @@ export function createOverlayWindow(electron, appRoot, { log, onMessage }) {
 
   function setMouseMode(interactive) {
     if (!win || win.isDestroyed()) return;
+    // Whip mode needs real mouse input. A non-activatable window gets mouse moves on Windows but
+    // not button presses, so the overlay becomes focusable only while the whip is armed; app.js
+    // hands focus back to the locked target on drop.
+    win.setFocusable(interactive);
     win.setIgnoreMouseEvents(!interactive, { forward: true });
+    if (interactive) win.focus();
     send('overlay:setMouseMode', { interactive });
   }
 
@@ -137,6 +143,9 @@ export function createOverlayWindow(electron, appRoot, { log, onMessage }) {
     hideSoon,
     setMouseMode,
     isReady: () => ready,
+    /** Renderer-side capture for diagnostics: returns a PNG Buffer of what the overlay draws. */
+    capture: async () => (win && !win.isDestroyed() ? (await win.webContents.capturePage()).toPNG() : null),
+    nativeHandle: () => (win && !win.isDestroyed() ? win.getNativeWindowHandle().readBigUInt64LE?.(0)?.toString() ?? '' : ''),
     destroy: () => {
       if (win && !win.isDestroyed()) win.destroy();
     },

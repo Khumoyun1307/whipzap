@@ -15,7 +15,7 @@ export default [
     },
   },
   {
-    files: ['src/preload.js'],
+    files: ['src/preload.js', 'test/**/*.cjs'],
     languageOptions: {
       ecmaVersion: 2024,
       sourceType: 'commonjs',

@@ -12,7 +12,7 @@ const MESSAGE_IN_MS = 120;
 const MESSAGE_HOLD_MS = 1200;
 const MESSAGE_OUT_MS = 200;
 const WHIP_GRACE_MS = 400;
-const WHIP_COOLDOWN_MS = 250;
+let whipCooldownMs = 600; // overridable per spawn (config.whip.cooldownMs)
 const DROP_TIMEOUT_MS = 1500;
 const HIT_TEST_FILL = 'rgba(0,0,0,0.004)';
 
@@ -120,7 +120,7 @@ function currentHead() {
 
 function detectCrack(now) {
   if (now - ropeSpawnedAt < WHIP_GRACE_MS) return;
-  if (now - lastCrackAt < WHIP_COOLDOWN_MS) return;
+  if (now - lastCrackAt < whipCooldownMs) return;
   const speed = tipSpeed(rope);
   if (speed > crackThreshold(rope)) {
     lastCrackAt = now;
@@ -129,14 +129,16 @@ function detectCrack(now) {
   }
 }
 
-function spawnWhip() {
+function spawnWhip(payload = {}) {
   const head = currentHead();
+  if (Number.isFinite(payload.cooldownMs)) whipCooldownMs = payload.cooldownMs;
   rope = createRope({
     x: head.x,
     y: head.y,
     segmentLength: Math.min(width, height) / 45,
     width,
     height,
+    ...(Number.isFinite(payload.crackFactor) ? { crackFactor: payload.crackFactor } : {}),
   });
   ropeMode = 'armed';
   ropeSpawnedAt = performance.now();
@@ -236,7 +238,8 @@ window.addEventListener('mousemove', (e) => {
   mouse.x = e.clientX;
   mouse.y = e.clientY;
 });
-window.addEventListener('mousedown', () => {
+window.addEventListener('mousedown', (e) => {
+  console.log('whipzap overlay mousedown', e.button, ropeMode);
   if (ropeMode === 'armed') bridge.send('overlay:clicked', {});
 });
 if (reduceMotionQuery && typeof reduceMotionQuery.addEventListener === 'function') {
@@ -244,7 +247,7 @@ if (reduceMotionQuery && typeof reduceMotionQuery.addEventListener === 'function
 }
 
 bridge.on('overlay:strike', onStrike);
-bridge.on('overlay:spawnWhip', () => spawnWhip());
+bridge.on('overlay:spawnWhip', (payload = {}) => spawnWhip(payload));
 bridge.on('overlay:dropWhip', () => dropWhip());
 bridge.on('overlay:toast', onToast);
 bridge.on('overlay:playSound', onPlaySound);
