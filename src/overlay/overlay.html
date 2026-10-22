@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' whipzap-asset:; script-src 'self'; style-src 'self' 'unsafe-inline'; media-src whipzap-asset:; img-src 'self'" />
+  <title>WhipZap overlay</title>
+  <style>
+    html, body {
+      background: transparent;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      width: 100%;
+      height: 100%;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body.whip { cursor: none; }
+    #stage {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    #message {
+      position: absolute;
+      top: 38%;
+      left: 50%;
+      width: 80%;
+      transform: translateX(-50%);
+      text-align: center;
+      font-family: "Impact", "Arial Black", "Helvetica Neue", Arial, sans-serif;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.05;
+      -webkit-text-stroke: 4px #15110c;
+      paint-order: stroke fill;
+      text-shadow: 0 0 24px rgba(0, 0, 0, 0.5);
+      pointer-events: none;
+      display: none;
+      opacity: 0;
+    }
+    #message .prefix {
+      font-size: calc(clamp(40px, 7vw, 120px) * 0.4);
+      margin-bottom: 0.15em;
+      -webkit-text-stroke-width: 2px;
+      min-height: 0;
+    }
+    #message .prefix:empty { display: none; }
+    #message .text {
+      font-size: clamp(40px, 7vw, 120px);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      word-wrap: break-word;
+    }
+    #message .underline {
+      height: 4px;
+      width: 40%;
+      margin: 0.12em auto 0 auto;
+      border-radius: 2px;
+      background: #ffd166;
+      box-shadow: 0 0 12px rgba(0, 0, 0, 0.5);
+    }
+    #message[data-tier="mild"] .underline { background: #ffd166; }
+    #message[data-tier="medium"] .underline { background: #ff7b54; }
+    #message[data-tier="spicy"] .underline { background: #ef233c; }
+    #toast {
+      position: absolute;
+      left: 50%;
+      bottom: 48px;
+      transform: translateX(-50%);
+      padding: 14px;
+      border-radius: 10px;
+      background: rgba(21, 17, 12, 0.88);
+      color: #fff;
+      font: 16px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      white-space: nowrap;
+      max-width: 90vw;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      pointer-events: none;
+      opacity: 0;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <div id="message" data-tier="mild">
+    <div class="prefix"></div>
+    <div class="text"></div>
+    <div class="underline"></div>
+  </div>
+  <div id="toast"></div>
+  <script type="module" src="./overlay.js"></script>
+</body>
+</html>
