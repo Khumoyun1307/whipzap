@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.log
+*.tgz
+.DS_Store
+Thumbs.db
+config.json.bak
+assets/sounds/_incoming/
+test/helpers/_*

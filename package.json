@@ -1,0 +1,36 @@
+{
+  "name": "whipzap",
+  "version": "0.1.0",
+  "description": "Whip your AI coding agent into shape. A tray app that cracks a whip, flashes a strike, and types a taunt into your locked terminal. Never interrupts the agent.",
+  "type": "module",
+  "main": "src/main/app.js",
+  "bin": { "whipzap": "bin/whipzap.js" },
+  "engines": { "node": ">=20" },
+  "os": ["win32", "darwin", "linux"],
+  "files": ["bin/", "src/", "assets/", "README.md", "LICENSE"],
+  "scripts": {
+    "start": "electron .",
+    "selftest": "electron . --whipzap-selftest",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:win": "node test/helpers/win-typing.test.mjs",
+    "lint": "eslint .",
+    "lint:keys": "node scripts/check-forbidden-keys.mjs",
+    "sounds": "node scripts/prepare-sounds.mjs"
+  },
+  "keywords": ["whip", "ai", "agent", "coding-agent", "tray", "overlay", "fun", "electron"],
+  "author": "Khumoyun1307",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/Khumoyun1307/whipzap.git" },
+  "bugs": { "url": "https://github.com/Khumoyun1307/whipzap/issues" },
+  "homepage": "https://github.com/Khumoyun1307/whipzap#readme",
+  "dependencies": {
+    "electron": "^45.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "eslint": "^10.0.0",
+    "globals": "^16.0.0",
+    "vitest": "^5.0.0"
+  }
+}

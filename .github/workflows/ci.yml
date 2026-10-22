@@ -1,0 +1,34 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      # Unit tests and lint never launch Electron; skip the ~100 MB binary download in CI.
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run lint:keys
+      - run: npm test
+      - name: Syntax-check POSIX helpers
+        if: runner.os != 'Windows'
+        run: sh -n src/main/helpers/mac/helper.sh && sh -n src/main/helpers/linux/helper.sh
+      - name: Windows typing integration test (needs an interactive desktop; informational)
+        if: runner.os == 'Windows'
+        run: npm run test:win
+        continue-on-error: true
