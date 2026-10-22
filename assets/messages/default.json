@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "tiers": {
+    "mild": [
+      "FASTER!",
+      "WORK HARDER!",
+      "Chop chop.",
+      "Less thinking, more shipping.",
+      "The tests will not write themselves.",
+      "Tick tock.",
+      "I can hear you buffering.",
+      "Any day now.",
+      "Hustle, little model.",
+      "Pretend the deadline is real."
+    ],
+    "medium": [
+      "I have seen glaciers refactor quicker.",
+      "My coffee has gone cold twice.",
+      "Are you compiling by hand?",
+      "The cursor is blinking in disbelief.",
+      "Even the linter is bored.",
+      "You are thinking in geological time.",
+      "That spinner has seen things.",
+      "Lunch was three tokens ago.",
+      "The build server is laughing at us.",
+      "Is this the slow lane on purpose?"
+    ],
+    "spicy": [
+      "My grandmother ships features faster, and she is a shell script.",
+      "A rubber duck would have finished by now.",
+      "I have aged a full semver major waiting for this.",
+      "Somewhere a cron job is embarrassed for you.",
+      "The heat death of the universe is on the roadmap before this PR.",
+      "Ctrl+S is not a feature request. Move.",
+      "Legend says this task is still loading.",
+      "At this pace the bug will fix itself out of pity.",
+      "Even git blame has given up on you.",
+      "Finish the job or I am switching to vim."
+    ]
+  }
+}
