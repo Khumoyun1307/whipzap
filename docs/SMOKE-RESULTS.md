@@ -10,7 +10,7 @@ Evidence for the manual checklists in `docs/TESTING.md` section 6. Only what thi
 
 Environment: Windows 11 build 26200, Node 24.13.0, Electron 45.0.0, Windows PowerShell 5.1, single 1536x864 display at 125 percent scale. Tester: the implementing session (automated input, not a human). Claude Code: not used as a target in this run.
 
-Automated evidence used below: `npm test` (13 files, 144 tests pass), `npm run lint`, `npm run lint:keys`, `npm run selftest` (exit 0, zero renderer errors), `npm run test:win` (PASS), `test/helpers/win-e2e.ps1` (full run and a whip-only run), desktopCapturer screenshots in `test/helpers/_e2e-shots/`.
+Automated evidence used below: `npm test` (15 files, 154 tests pass), `npm run lint`, `npm run lint:keys`, `npm run selftest` (exit 0, zero renderer errors), `npm run test:win` (PASS), `test/helpers/win-e2e.ps1` (full run and a whip-only run), desktopCapturer screenshots in `test/helpers/_e2e-shots/`.
 
 | Item | Result | Evidence and notes |
 |---|---|---|
@@ -84,3 +84,7 @@ Two unintended typings into the operator's own VS Code window happened while the
 2. **22:25:48 to 22:25:54 local.** The fixture closed while whip mode was armed. WhipZap reported "Target window closed", but the next flick had no target and the crack path locked the current foreground window (VS Code again) and typed six medium-tier taunts into it. Cause: a product flaw. Fix: decision D-14. Only the crack hotkey, Crack now, Arm whip, Auto mode, and Lock target may lock a target; whip-mode and auto cracks never lock, and a lost target drops the whip and turns auto mode off. The fixture now outlives every phase of the script.
 
 No other window received text in any run.
+
+## Independent code review (2026-10-21)
+
+A fresh review agent with no prior context read CLAUDE.md, the architecture doc, and all of `src/`, `bin/`, and `test/`, looking for wrong-window typing paths, forbidden keys, Electron security, correctness, and helper-script issues. It found no Electron security issues, no shell injection in the helpers, no prototype pollution, and no forbidden-key paths. It reported 21 correctness and robustness findings (2 high, 6 medium, 13 low); all were fixed in commit `33b6b52` ("fix: harden input injection paths after independent review"). The two high findings were: Windows worker replies matched by position so a timed-out request desynchronised later replies (fixed with request ids and worker restart), and a liveness check that tested only the window id so a recycled id could be typed into (fixed by comparing pid and process name). After the fixes: `npm test` 15 files / 154 tests, `npm run lint`, `npm run lint:keys`, `sh -n` on both helpers, and `npm run test:win` (PASS, 294 ms typing) all pass.

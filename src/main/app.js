@@ -485,12 +485,12 @@ async function runSelfTest() {
     log.info('captured screen to', process.env.WHIPZAP_SELFTEST_SCREEN, shot?.length, 'bytes');
   }
   await sleep(350);
-  overlay.setMouseMode(true);
+  // Mouse mode is not enabled here: it would make the overlay focusable and steal focus from
+  // whatever the person running the self-test is doing. The rope renders without it.
   overlay.send('overlay:spawnWhip', { seed: 7 });
   await sleep(400);
   overlay.send('overlay:dropWhip', {});
   await sleep(1200);
-  overlay.setMouseMode(false);
   log.info(`selftest done, renderer errors: ${errors}`);
   app.exit(errors ? 1 : 0);
 }
