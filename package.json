@@ -4,10 +4,28 @@
   "description": "Whip your AI coding agent into shape. A tray app that cracks a whip, flashes a strike, and types a taunt into your locked terminal. Never interrupts the agent.",
   "type": "module",
   "main": "src/main/app.js",
-  "bin": { "whipzap": "bin/whipzap.js" },
-  "engines": { "node": ">=20" },
-  "os": ["win32", "darwin", "linux"],
-  "files": ["bin/", "src/", "assets/", "README.md", "LICENSE"],
+  "bin": {
+    "whipzap": "bin/whipzap.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "os": [
+    "win32",
+    "darwin",
+    "linux"
+  ],
+  "files": [
+    "bin/",
+    "src/",
+    "assets/icons/",
+    "assets/sounds/*.wav",
+    "assets/messages/",
+    "assets/CREDITS.md",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
   "scripts": {
     "start": "electron .",
     "selftest": "electron . --whipzap-selftest",
@@ -18,11 +36,25 @@
     "lint:keys": "node scripts/check-forbidden-keys.mjs",
     "sounds": "node scripts/prepare-sounds.mjs"
   },
-  "keywords": ["whip", "ai", "agent", "coding-agent", "tray", "overlay", "fun", "electron"],
+  "keywords": [
+    "whip",
+    "ai",
+    "agent",
+    "coding-agent",
+    "tray",
+    "overlay",
+    "fun",
+    "electron"
+  ],
   "author": "Khumoyun1307",
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/Khumoyun1307/whipzap.git" },
-  "bugs": { "url": "https://github.com/Khumoyun1307/whipzap/issues" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Khumoyun1307/whipzap.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Khumoyun1307/whipzap/issues"
+  },
   "homepage": "https://github.com/Khumoyun1307/whipzap#readme",
   "dependencies": {
     "electron": "^45.0.0"

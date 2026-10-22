@@ -8,7 +8,7 @@
 #
 # Nothing is typed into any window other than the fixture: it is TopMost and focused when the
 # hotkey fires, so WhipZap locks it as the target. Uses the clipboard for Print Screen captures.
-param([switch]$SkipAuto)
+param([switch]$SkipAuto, [switch]$Force)
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Set-Location $root
@@ -32,8 +32,21 @@ using System; using System.Runtime.InteropServices;
 public static class E2E {
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] public static extern void mouse_event(uint flags, int dx, int dy, uint data, IntPtr extra);
+  [StructLayout(LayoutKind.Sequential)] public struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+  [DllImport("user32.dll")] public static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+  public static double IdleSeconds() {
+    var lii = new LASTINPUTINFO(); lii.cbSize = (uint)Marshal.SizeOf(typeof(LASTINPUTINFO));
+    GetLastInputInfo(ref lii);
+    return (Environment.TickCount - (int)lii.dwTime) / 1000.0;
+  }
 }
 '@
+# This script moves the mouse, presses hotkeys, and makes WhipZap type. Never run it while a person
+# is using the machine. Require 45 s without keyboard or mouse input unless -Force is given.
+if (-not $Force) {
+  $idle = [E2E]::IdleSeconds()
+  if ($idle -lt 45) { throw "ABORT: user input seen $([int]$idle) s ago; refusing to drive the desktop (use -Force to override)" }
+}
 $shotDir = Join-Path $root 'test\helpers\_e2e-shots'
 $trigger = Join-Path $tmp 'shot.trigger'
 Remove-Item -Force -ErrorAction SilentlyContinue $trigger, "$trigger.quit"
